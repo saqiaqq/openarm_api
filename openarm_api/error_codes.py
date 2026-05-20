@@ -1,0 +1,45 @@
+"""Error-code mirror of `openarm_skills/include/openarm_skills/error_codes.hpp`.
+
+Keep the integer values in sync. The schema file
+`schemas/error_codes.json` is the human-readable reference shared with
+upper-computer / LLM clients.
+"""
+
+OK = 0
+
+PLAN_FAILED = 1001
+ACTION_TIMEOUT = 1002
+GRIP_NOT_HELD = 1003
+EXECUTE_FAILED = 1004
+
+CAMERA_NO_CLOUD = 2001
+CAMERA_NO_TARGET = 2002
+CAMERA_OUT_OF_RANGE = 2003
+PERCEPTION_TIMEOUT = 2004
+
+BAD_REQUEST = 3001
+UNSUPPORTED_CMD = 3002
+
+STOPPED_BY_USER = 9001
+INTERNAL_ERROR = 9002
+
+
+CODE_TO_NAME = {
+    OK: "OK",
+    PLAN_FAILED: "PLAN_FAILED",
+    ACTION_TIMEOUT: "ACTION_TIMEOUT",
+    GRIP_NOT_HELD: "GRIP_NOT_HELD",
+    EXECUTE_FAILED: "EXECUTE_FAILED",
+    CAMERA_NO_CLOUD: "CAMERA_NO_CLOUD",
+    CAMERA_NO_TARGET: "CAMERA_NO_TARGET",
+    CAMERA_OUT_OF_RANGE: "CAMERA_OUT_OF_RANGE",
+    PERCEPTION_TIMEOUT: "PERCEPTION_TIMEOUT",
+    BAD_REQUEST: "BAD_REQUEST",
+    UNSUPPORTED_CMD: "UNSUPPORTED_CMD",
+    STOPPED_BY_USER: "STOPPED_BY_USER",
+    INTERNAL_ERROR: "INTERNAL_ERROR",
+}
+
+
+def name_of(code: int) -> str:
+    return CODE_TO_NAME.get(code, f"UNKNOWN_{code}")

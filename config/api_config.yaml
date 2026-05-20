@@ -1,0 +1,14 @@
+openarm_api:
+  ros__parameters:
+    # Enable the FastAPI / WebSocket front-end alongside the ROS2 service.
+    # Set to false if the upper computer is itself a ROS2 node.
+    enable_http: true
+    http_host: "0.0.0.0"
+    http_port: 8080
+
+    # Idempotency cache: identical cmd_id within this many calls returns
+    # the cached response (prevents an LLM retry from running pick twice).
+    dedup_cache_size: 256
+
+    # Default timeout when the envelope omits `timeout_s` (seconds).
+    default_timeout_s: 60.0

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>openarm_api</name>
+  <version>0.1.0</version>
+  <description>
+    JSON gateway for the OpenArm skill layer. Translates a single, schema-
+    validated JSON envelope (cmd_id / cmd_type / params) into ROS2 actions and
+    services on top of openarm_skills, and re-broadcasts execution status
+    back to the caller through ROS2 topics or an optional HTTP/WebSocket
+    endpoint.  Designed to be the only surface area an upper computer or LLM
+    agent has to deal with.
+  </description>
+  <maintainer email="user@example.com">User</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>openarm_skills</depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

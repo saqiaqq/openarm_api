@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "OpenArm API error codes",
+  "description": "Single source of truth for result_code values returned by the OpenArm JSON gateway. Mirror of openarm_skills/include/openarm_skills/error_codes.hpp.",
+  "type": "object",
+  "errors": [
+    { "code": 0,    "name": "OK",                  "category": "ok",         "description": "Operation succeeded." },
+
+    { "code": 1001, "name": "PLAN_FAILED",         "category": "motion",     "description": "MoveIt failed to plan or Cartesian path fraction below threshold (after server-side retries)." },
+    { "code": 1002, "name": "ACTION_TIMEOUT",      "category": "motion",     "description": "A step exceeded step_timeout_s." },
+    { "code": 1003, "name": "GRIP_NOT_HELD",       "category": "motion",     "description": "Finger position indicates an empty grasp after the configured retry." },
+    { "code": 1004, "name": "EXECUTE_FAILED",      "category": "motion",     "description": "Trajectory was planned but the controller refused / failed execution." },
+
+    { "code": 2001, "name": "CAMERA_NO_CLOUD",     "category": "perception", "description": "Perception service unreachable or no point cloud arrived." },
+    { "code": 2002, "name": "CAMERA_NO_TARGET",    "category": "perception", "description": "The requested target_name was not found in the scene." },
+    { "code": 2003, "name": "CAMERA_OUT_OF_RANGE", "category": "perception", "description": "Computed pose is outside the configured workspace bounds." },
+    { "code": 2004, "name": "PERCEPTION_TIMEOUT", "category": "perception", "description": "Perception call exceeded perception_timeout_s." },
+
+    { "code": 3001, "name": "BAD_REQUEST",         "category": "protocol",   "description": "JSON Schema validation failed or argument out of range." },
+    { "code": 3002, "name": "UNSUPPORTED_CMD",     "category": "protocol",   "description": "Unknown cmd_type." },
+
+    { "code": 9001, "name": "STOPPED_BY_USER",     "category": "lifecycle",  "description": "Aborted by /openarm/stop or action cancel." },
+    { "code": 9002, "name": "INTERNAL_ERROR",      "category": "lifecycle",  "description": "Unexpected exception in the gateway or skill server." }
+  ]
+}

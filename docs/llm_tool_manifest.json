@@ -1,0 +1,73 @@
+{
+  "$comment": "LLM function-calling manifest. Drop this into the `tools` array of an OpenAI / Anthropic / similar API call. Each tool corresponds to one cmd_type. The model should always populate `cmd_id` with a fresh UUID.",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "pick_place",
+        "description": "Drive the chosen arm through a complete pick -> transport -> place cycle. Use pose_source='camera' and supply target_name to let the head 3D camera resolve the poses; or pose_source='upper_computer' and supply both grasp_pose and place_pose explicitly.",
+        "parameters": {
+          "type": "object",
+          "required": ["cmd_id", "arm", "pose_source"],
+          "properties": {
+            "cmd_id":      { "type": "string", "description": "Fresh UUID per call." },
+            "arm":         { "type": "string", "enum": ["left", "right"] },
+            "pose_source": { "type": "string", "enum": ["camera", "upper_computer"] },
+            "target_name": { "type": "string", "description": "Object label, required when pose_source=camera (e.g. 'cup')." },
+            "target_index":{ "type": "integer", "minimum": 0, "default": 0 },
+            "grasp_pose":  { "$ref": "openarm_api/pose.schema.json" },
+            "place_pose":  { "$ref": "openarm_api/pose.schema.json" },
+            "approach_offset_m": { "type": "number", "default": 0.05 },
+            "retreat_offset_m":  { "type": "number", "default": 0.05 },
+            "speed_scale":       { "type": "number", "default": 0.10 }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "home",
+        "description": "Drive both arms (or one) back to the SRDF home pose.",
+        "parameters": {
+          "type": "object",
+          "required": ["cmd_id"],
+          "properties": {
+            "cmd_id":      { "type": "string" },
+            "arm":         { "type": "string", "enum": ["left", "right", "both"], "default": "both" },
+            "speed_scale": { "type": "number", "default": 0.30 }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "gripper",
+        "description": "Open or close one gripper.",
+        "parameters": {
+          "type": "object",
+          "required": ["cmd_id", "arm", "action"],
+          "properties": {
+            "cmd_id":   { "type": "string" },
+            "arm":      { "type": "string", "enum": ["left", "right"] },
+            "action":   { "type": "string", "enum": ["open", "close", "half_close"] },
+            "position": { "type": "number", "description": "Optional explicit finger position in metres; overrides action." }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "stop",
+        "description": "Emergency stop. Pre-empts any active pick_place and halts the controllers.",
+        "parameters": {
+          "type": "object",
+          "required": ["cmd_id"],
+          "properties": { "cmd_id": { "type": "string" } }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "openarm_api/pick_place.schema.json",
+  "title": "pick_place params",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "target_name":       { "type": "string" },
+    "target_index":      { "type": "integer", "minimum": 0, "default": 0 },
+    "grasp_pose":        { "$ref": "openarm_api/pose.schema.json" },
+    "place_pose":        { "$ref": "openarm_api/pose.schema.json" },
+    "approach_offset_m": { "type": "number", "minimum": 0.0, "maximum": 0.5, "default": 0.05 },
+    "retreat_offset_m":  { "type": "number", "minimum": 0.0, "maximum": 0.5, "default": 0.05 },
+    "speed_scale":       { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0, "default": 0.10 },
+    "gripper_force":     { "type": "number", "minimum": 0.0, "default": 0.0 }
+  },
+  "allOf": [
+    {
+      "if":  { "$ref": "openarm_api/envelope.schema.json#/properties/pose_source", "const": "upper_computer" },
+      "then": { "required": ["grasp_pose", "place_pose"] }
+    }
+  ]
+}

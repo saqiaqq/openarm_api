@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "openarm_api/envelope.schema.json",
+  "title": "OpenArm command envelope",
+  "description": "All upper-computer / LLM requests share this top-level shape. Fields that depend on cmd_type live under `params` and are validated by per-command schemas.",
+  "type": "object",
+  "required": ["cmd_id", "cmd_type"],
+  "additionalProperties": false,
+  "properties": {
+    "cmd_id":     { "type": "string", "minLength": 1, "maxLength": 64,
+                    "description": "Caller-generated UUID. Used for idempotency / correlation." },
+    "cmd_type":   { "type": "string",
+                    "enum": ["pick_place", "pick", "place", "home", "stop", "gripper", "get_status"] },
+    "arm":        { "type": "string", "enum": ["left", "right", "both"] },
+    "pose_source":{ "type": "string", "enum": ["camera", "upper_computer"] },
+    "params":     { "type": "object" },
+    "timeout_s":  { "type": "number", "minimum": 0, "maximum": 300 }
+  }
+}

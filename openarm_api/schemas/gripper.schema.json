@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "openarm_api/gripper.schema.json",
+  "title": "gripper params",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action"],
+  "properties": {
+    "action":   { "type": "string", "enum": ["open", "close", "half_close"] },
+    "position": { "type": "number", "minimum": 0.0, "maximum": 0.05,
+                  "description": "Optional explicit finger position (m); overrides action when > 0." },
+    "force":    { "type": "number", "minimum": 0.0 }
+  }
+}
