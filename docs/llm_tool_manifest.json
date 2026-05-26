@@ -51,8 +51,10 @@
           "properties": {
             "cmd_id":   { "type": "string" },
             "arm":      { "type": "string", "enum": ["left", "right"] },
-            "action":   { "type": "string", "enum": ["open", "close", "half_close"] },
-            "position": { "type": "number", "description": "Optional explicit finger position in metres; overrides action." }
+            "action":   { "type": "string", "enum": ["open", "close", "half_close", "grasp"] },
+            "position": { "type": "number", "description": "Optional explicit finger position in metres; overrides action." },
+            "force":    { "type": "number", "description": "Optional gripper force/hold strength; 0 uses controller default." },
+            "speed":    { "type": "number", "description": "Optional gripper speed scale; 0 uses default, smaller is slower." }
           }
         }
       }

@@ -12,7 +12,10 @@
     "approach_offset_m": { "type": "number", "minimum": 0.0, "maximum": 0.5, "default": 0.05 },
     "retreat_offset_m":  { "type": "number", "minimum": 0.0, "maximum": 0.5, "default": 0.05 },
     "speed_scale":       { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0, "default": 0.10 },
-    "gripper_force":     { "type": "number", "minimum": 0.0, "default": 0.0 }
+    "gripper_force":     { "type": "number", "minimum": 0.0, "maximum": 40.0, "default": 0.0,
+                           "description": "Optional gripper force/hold strength during grasp; 0 uses controller default." },
+    "gripper_speed":     { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.0,
+                           "description": "Optional gripper speed scale during grasp; 0 uses default." }
   },
   "allOf": [
     {

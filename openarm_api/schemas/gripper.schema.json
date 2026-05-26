@@ -6,9 +6,12 @@
   "additionalProperties": false,
   "required": ["action"],
   "properties": {
-    "action":   { "type": "string", "enum": ["open", "close", "half_close"] },
+    "action":   { "type": "string", "enum": ["open", "close", "half_close", "grasp"] },
     "position": { "type": "number", "minimum": 0.0, "maximum": 0.05,
                   "description": "Optional explicit finger position (m); overrides action when > 0." },
-    "force":    { "type": "number", "minimum": 0.0 }
+    "force":    { "type": "number", "minimum": 0.0, "maximum": 40.0,
+                  "description": "Optional gripper force/hold strength; 0 uses controller default." },
+    "speed":    { "type": "number", "minimum": 0.0, "maximum": 1.0,
+                  "description": "Optional gripper speed scale; 0 uses default, smaller is slower." }
   }
 }

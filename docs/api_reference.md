@@ -77,7 +77,7 @@ Camera mode (`pose_source = "camera"`):
 
 ```jsonc
 { "cmd_id":"...", "cmd_type":"gripper", "arm":"right",
-  "params": { "action": "open" } }
+  "params": { "action": "grasp", "force": 8.0, "speed": 0.5 } } // speed 越小越慢
 ```
 
 ### `cmd_type = stop`

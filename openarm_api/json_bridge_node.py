@@ -290,6 +290,8 @@ class JsonBridgeNode(Node):
         goal.approach_offset_m = float(params.get("approach_offset_m", 0.05))
         goal.retreat_offset_m  = float(params.get("retreat_offset_m",  0.05))
         goal.speed_scale       = float(params.get("speed_scale",       0.10))
+        goal.gripper_force     = float(params.get("gripper_force",     0.0))
+        goal.gripper_speed     = float(params.get("gripper_speed",     0.0))
         goal.timeout_s         = float(env.get("timeout_s",
                                               self.get_parameter("default_timeout_s").value))
 
@@ -379,6 +381,7 @@ class JsonBridgeNode(Node):
         req.action = params.get("action", "open")
         req.position = float(params.get("position", 0.0))
         req.force = float(params.get("force", 0.0))
+        req.speed = float(params.get("speed", 0.0))
         fut = self._gripper_client.call_async(req)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=10.0)
         r = fut.result()
