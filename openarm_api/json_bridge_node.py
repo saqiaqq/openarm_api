@@ -290,6 +290,7 @@ class JsonBridgeNode(Node):
         goal.approach_offset_m = float(params.get("approach_offset_m", 0.05))
         goal.retreat_offset_m  = float(params.get("retreat_offset_m",  0.05))
         goal.speed_scale       = float(params.get("speed_scale",       0.10))
+        goal.target_radius     = float(params.get("target_radius",     0.0))
         goal.gripper_force     = float(params.get("gripper_force",     0.0))
         goal.gripper_speed     = float(params.get("gripper_speed",     0.0))
         goal.timeout_s         = float(env.get("timeout_s",

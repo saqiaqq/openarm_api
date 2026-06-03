@@ -19,7 +19,13 @@
             "place_pose":  { "$ref": "openarm_api/pose.schema.json" },
             "approach_offset_m": { "type": "number", "default": 0.05 },
             "retreat_offset_m":  { "type": "number", "default": 0.05 },
-            "speed_scale":       { "type": "number", "default": 0.10 }
+            "speed_scale":       { "type": "number", "default": 0.10 },
+            "target_radius":     { "type": "number", "default": 0.0,
+                                   "description": "Object sphere (m): pick.approach avoids grasp center, place.retreat avoids place center." },
+            "gripper_force":     { "type": "number", "default": 0.0,
+                                   "description": "Gripper hold force during grasp (N); 0 uses controller default." },
+            "gripper_speed":     { "type": "number", "default": 0.0,
+                                   "description": "Gripper speed scale during grasp; 0 uses default." }
           }
         }
       }

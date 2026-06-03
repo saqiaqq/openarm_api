@@ -48,7 +48,10 @@ Enable the HTTP/WS surface with `enable_http:=true` on the launch file or in
     "place_pose":  { "xyz": [0.30,-0.20, 0.20], "rpy": [0, 1.5708, 0], "frame": "base_link" },
     "approach_offset_m": 0.05,
     "retreat_offset_m":  0.05,
-    "speed_scale":       0.10
+    "speed_scale":       0.10,
+    "target_radius":     0.04,
+    "gripper_force":     8.0,
+    "gripper_speed":     0.3
   },
   "timeout_s": 30
 }
