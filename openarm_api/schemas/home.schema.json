@@ -5,6 +5,8 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "speed_scale": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0, "default": 0.30 }
+    "speed_scale": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0, "default": 0.30 },
+    "pose": { "type": "string", "enum": ["home", "hands_up"],
+              "description": "Optional named pose for cmd_type=home (default home)." }
   }
 }

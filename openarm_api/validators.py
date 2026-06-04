@@ -26,6 +26,7 @@ _PARAM_SCHEMAS = {
     "pick":       "pick_place.schema.json",   # share schema; pick uses same params
     "place":      "pick_place.schema.json",
     "home":       "home.schema.json",
+    "hands_up":   "home.schema.json",
     "stop":       "stop.schema.json",
     "gripper":    "gripper.schema.json",
     "get_status": "stop.schema.json",          # empty params

@@ -22,7 +22,7 @@ Wire format -- request envelope
 -------------------------------
     {
       "cmd_id": "<uuid>",                            # required
-      "cmd_type": "pick_place|pick|place|home|stop|gripper|get_status",
+      "cmd_type": "pick_place|pick|place|home|hands_up|stop|gripper|get_status",
       "arm": "left|right|both",
       "pose_source": "camera|upper_computer",
       "params": { ... per-cmd, see schemas/ ... },
@@ -63,8 +63,10 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import rclpy
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as CmdPoolTimeout
 from rclpy.action import ActionClient
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import Pose, Quaternion
@@ -78,6 +80,7 @@ from openarm_skills.srv import (
 )
 
 from . import error_codes as ec
+from .gripper_defaults import apply_gripper_param_defaults
 from .validators import EnvelopeValidator
 
 
@@ -175,18 +178,35 @@ class JsonBridgeNode(Node):
         cache_size = int(self.get_parameter("dedup_cache_size").value)
         self._cache: _LRU = _LRU(cache_size)
         self._cache_lock = threading.Lock()
+        self._cb_group = ReentrantCallbackGroup()
 
         self._validator = EnvelopeValidator()
+
+        # Dedicated I/O node + executor thread: avoid spin_until_future_complete
+        # on the main node from within /openarm/command (deadlocks 2nd+ calls).
+        self._io_node = Node("openarm_api_io")
+        self._io_executor = SingleThreadedExecutor()
+        self._io_executor.add_node(self._io_node)
+        self._io_thread = threading.Thread(
+            target=self._io_executor.spin, name="openarm_api_io", daemon=True)
+        self._io_thread.start()
+
+        self._cmd_pool = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="openarm_cmd")
 
         # ---- ROS2 surface --------------------------------------------------
         self._event_pub = self.create_publisher(String, "/openarm/skill/event", 32)
         self._command_srv = self.create_service(
-            StringCommand, "/openarm/command", self._on_command_srv)
+            StringCommand, "/openarm/command", self._on_command_srv,
+            callback_group=self._cb_group)
 
-        self._pick_place_client = ActionClient(self, PickPlace, "/openarm/pick_place")
-        self._stop_client = self.create_client(StopSrv, "/openarm/stop")
-        self._home_client = self.create_client(GotoHomeSrv, "/openarm/goto_home")
-        self._gripper_client = self.create_client(GripperSrv, "/openarm/gripper")
+        self._pick_place_client = ActionClient(
+            self._io_node, PickPlace, "/openarm/pick_place")
+        self._stop_client = self._io_node.create_client(StopSrv, "/openarm/stop")
+        self._home_client = self._io_node.create_client(
+            GotoHomeSrv, "/openarm/goto_home")
+        self._gripper_client = self._io_node.create_client(
+            GripperSrv, "/openarm/gripper")
 
         # ---- websocket subscribers (for HTTP gateway) ---------------------
         self._ws_subs: list[Callable[[str], None]] = []
@@ -198,14 +218,68 @@ class JsonBridgeNode(Node):
 
         self.get_logger().info(
             "openarm_api JSON bridge ready. service=/openarm/command, "
-            "event topic=/openarm/skill/event")
+            "event topic=/openarm/skill/event (io_thread=openarm_api_io)")
+
+    def _wait_on_io_future(self, future, timeout_sec: float, label: str):
+        """Poll future while openarm_api_io executor thread delivers responses."""
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < timeout_sec:
+            if future.done():
+                self.get_logger().debug(
+                    f"[DBG] {label} done elapsed={time.monotonic() - t0:.2f}s")
+                return True
+            time.sleep(0.02)
+        elapsed = time.monotonic() - t0
+        self.get_logger().error(
+            f"{label}: service call TIMEOUT after {elapsed:.2f}s "
+            f"(limit={timeout_sec:.1f}s; skill_server may be stuck or dead)")
+        return future.done()
+
+    def _call_service_sync(self, client, request, timeout_sec: float, label: str):
+        """Returns (response, error). error is 'unavailable', 'timeout', or None."""
+        t0 = time.monotonic()
+        self.get_logger().info(
+            f"service call START {label} timeout={timeout_sec:.1f}s")
+        wait_svc = min(2.0, timeout_sec)
+        if not client.wait_for_service(timeout_sec=wait_svc):
+            self.get_logger().error(
+                f"{label}: service unavailable after {wait_svc:.1f}s "
+                "(skill_server_node not running or crashed)")
+            return None, "unavailable"
+        future = client.call_async(request)
+        if not self._wait_on_io_future(future, timeout_sec, label):
+            return None, "timeout"
+        self.get_logger().info(
+            f"service call END {label} elapsed={time.monotonic() - t0:.2f}s")
+        return future.result(), None
 
     # ======================================================================
     # ROS2 service handler
     # ======================================================================
     def _on_command_srv(self, req: StringCommand.Request,
                         resp: StringCommand.Response) -> StringCommand.Response:
-        resp.response_json = self.handle_json(req.request_json)
+        preview = (req.request_json or "")[:120]
+        self.get_logger().info(
+            f"[DBG] /openarm/command ENTER thread={threading.current_thread().name} "
+            f"preview={preview!r}")
+        t0 = time.monotonic()
+        try:
+            resp.response_json = self._cmd_pool.submit(
+                self.handle_json, req.request_json
+            ).result(timeout=120.0)
+        except CmdPoolTimeout:
+            self.get_logger().error(
+                "[DBG] /openarm/command command pool TIMEOUT (120s)")
+            resp.response_json = json.dumps(_envelope(
+                "", success=False, result_code=ec.ACTION_TIMEOUT,
+                status="error", message="openarm_api command pool timeout"))
+        except Exception as e:
+            self.get_logger().error(f"[DBG] /openarm/command exception: {e!r}")
+            resp.response_json = json.dumps(_envelope(
+                "", success=False, result_code=ec.INTERNAL_ERROR,
+                status="error", message=f"command handler error: {e}"))
+        self.get_logger().info(
+            f"[DBG] /openarm/command EXIT elapsed={time.monotonic() - t0:.2f}s")
         return resp
 
     # ======================================================================
@@ -221,6 +295,11 @@ class JsonBridgeNode(Node):
 
         cmd_id = envelope.get("cmd_id") or str(uuid.uuid4())
 
+        if envelope.get("cmd_type") == "gripper":
+            env_params, _ = apply_gripper_param_defaults(envelope.get("params"))
+            envelope = dict(envelope)
+            envelope["params"] = env_params
+
         # idempotency cache check
         with self._cache_lock:
             if cmd_id in self._cache:
@@ -235,11 +314,17 @@ class JsonBridgeNode(Node):
             return out
 
         cmd = envelope["cmd_type"]
+        self.get_logger().info(
+            f"command dispatch: cmd_type={cmd} arm={envelope.get('arm')} "
+            f"timeout_s={envelope.get('timeout_s')}"
+        )
         try:
             if cmd in ("pick_place", "pick", "place"):
                 out = self._do_pick_place(envelope)
             elif cmd == "home":
                 out = self._do_home(envelope)
+            elif cmd == "hands_up":
+                out = self._do_hands_up(envelope)
             elif cmd == "stop":
                 out = self._do_stop(envelope)
             elif cmd == "gripper":
@@ -299,7 +384,10 @@ class JsonBridgeNode(Node):
         # Action call with feedback rebroadcast.
         send_future = self._pick_place_client.send_goal_async(
             goal, feedback_callback=lambda fb: self._rebroadcast_feedback(cmd_id, fb))
-        rclpy.spin_until_future_complete(self, send_future, timeout_sec=5.0)
+        if not self._wait_on_io_future(send_future, 5.0, "pick_place send_goal"):
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.ACTION_TIMEOUT,
+                status="error", message="pick_place send_goal timeout"))
         gh = send_future.result()
         if gh is None or not gh.accepted:
             return json.dumps(_envelope(
@@ -307,7 +395,11 @@ class JsonBridgeNode(Node):
                 status="error", message="goal rejected by skill server"))
 
         result_future = gh.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future, timeout_sec=goal.timeout_s + 30.0)
+        if not self._wait_on_io_future(
+                result_future, goal.timeout_s + 30.0, "pick_place result"):
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.ACTION_TIMEOUT,
+                status="error", message="action result timeout"))
         wrap = result_future.result()
         if wrap is None:
             return json.dumps(_envelope(
@@ -333,65 +425,102 @@ class JsonBridgeNode(Node):
 
     def _do_home(self, env: dict) -> str:
         cmd_id = env["cmd_id"]
-        if not self._home_client.wait_for_service(timeout_sec=2.0):
-            return json.dumps(_envelope(
-                cmd_id, success=False, result_code=ec.INTERNAL_ERROR,
-                status="error", message="goto_home service unavailable"))
         req = GotoHomeSrv.Request()
         req.arm = env.get("arm", "both")
         req.speed_scale = float((env.get("params") or {}).get("speed_scale", 0.30))
-        fut = self._home_client.call_async(req)
-        rclpy.spin_until_future_complete(self, fut, timeout_sec=30.0)
-        r = fut.result()
+        req.pose_name = str((env.get("params") or {}).get("pose", "home"))
+        r, err = self._call_service_sync(
+            self._home_client, req, 60.0,
+            f"goto_home arm={req.arm} pose={req.pose_name}")
+        if err == "unavailable":
+            msg = "goto_home service unavailable (skill_server not running)"
+        elif err == "timeout":
+            msg = "home call timeout"
+        else:
+            msg = r.message if r else "home call failed"
         return json.dumps(_envelope(
             cmd_id,
             success=bool(r and r.success),
             result_code=int(r.result_code) if r else ec.ACTION_TIMEOUT,
             status="done" if (r and r.success) else "error",
-            message=(r.message if r else "home call timeout"),
+            message=msg,
+        ))
+
+    def _do_hands_up(self, env: dict) -> str:
+        cmd_id = env["cmd_id"]
+        req = GotoHomeSrv.Request()
+        req.arm = "both"
+        req.speed_scale = float((env.get("params") or {}).get("speed_scale", 0.30))
+        req.pose_name = "hands_up"
+        r, err = self._call_service_sync(self._home_client, req, 60.0, "hands_up")
+        if err == "unavailable":
+            msg = "hands_up service unavailable (skill_server not running)"
+        elif err == "timeout":
+            msg = "hands_up call timeout"
+        else:
+            msg = r.message if r else "hands_up call failed"
+        return json.dumps(_envelope(
+            cmd_id,
+            success=bool(r and r.success),
+            result_code=int(r.result_code) if r else ec.ACTION_TIMEOUT,
+            status="done" if (r and r.success) else "error",
+            message=msg,
         ))
 
     def _do_stop(self, env: dict) -> str:
         cmd_id = env["cmd_id"]
-        if not self._stop_client.wait_for_service(timeout_sec=1.0):
-            return json.dumps(_envelope(
-                cmd_id, success=False, result_code=ec.INTERNAL_ERROR,
-                status="error", message="stop service unavailable"))
         req = StopSrv.Request()
         req.cmd_id = cmd_id
-        fut = self._stop_client.call_async(req)
-        rclpy.spin_until_future_complete(self, fut, timeout_sec=3.0)
-        r = fut.result()
+        r, err = self._call_service_sync(self._stop_client, req, 3.0, "stop")
+        if err == "unavailable":
+            msg = "stop service unavailable (skill_server not running)"
+        elif err == "timeout":
+            msg = "stop call timeout"
+        else:
+            msg = r.message if r else "stop call failed"
         return json.dumps(_envelope(
             cmd_id,
             success=bool(r and r.success),
             result_code=ec.STOPPED_BY_USER if (r and r.success) else ec.INTERNAL_ERROR,
             status="stopped" if (r and r.success) else "error",
-            message=(r.message if r else "stop call timeout"),
+            message=msg,
         ))
 
     def _do_gripper(self, env: dict) -> str:
         cmd_id = env["cmd_id"]
-        params = env.get("params", {}) or {}
-        if not self._gripper_client.wait_for_service(timeout_sec=2.0):
-            return json.dumps(_envelope(
-                cmd_id, success=False, result_code=ec.INTERNAL_ERROR,
-                status="error", message="gripper service unavailable"))
+        params, action = apply_gripper_param_defaults(env.get("params"))
         req = GripperSrv.Request()
         req.arm = env.get("arm", "right")
-        req.action = params.get("action", "open")
-        req.position = float(params.get("position", 0.0))
-        req.force = float(params.get("force", 0.0))
-        req.speed = float(params.get("speed", 0.0))
-        fut = self._gripper_client.call_async(req)
-        rclpy.spin_until_future_complete(self, fut, timeout_sec=10.0)
-        r = fut.result()
+        req.action = action
+        req.position = float(params["position"])
+        req.force = float(params["force"])
+        req.speed = float(params["speed"])
+        default_timeout = 60.0 if req.arm == "both" else 25.0
+        timeout = float(env.get("timeout_s", 0)) or default_timeout
+        label = (
+            f"gripper arm={req.arm} action={req.action} "
+            f"pos={req.position:.4f} force={req.force:.2f} speed={req.speed:.2f}"
+        )
+        self.get_logger().info(f"gripper -> /openarm/gripper {label} timeout={timeout:.1f}s")
+        r, err = self._call_service_sync(self._gripper_client, req, timeout, label)
+        if err == "unavailable":
+            msg = (
+                "gripper service unavailable (skill_server_node crashed or not started; "
+                "check log for 'already been added to an executor')"
+            )
+        elif err == "timeout":
+            msg = (
+                f"gripper call timeout after {timeout:.0f}s "
+                "(skill_server did not respond; see skill_server log)"
+            )
+        else:
+            msg = r.message if r else "gripper call failed"
         return json.dumps(_envelope(
             cmd_id,
             success=bool(r and r.success),
             result_code=int(r.result_code) if r else ec.ACTION_TIMEOUT,
             status="done" if (r and r.success) else "error",
-            message=(r.message if r else "gripper call timeout"),
+            message=msg,
         ))
 
     # ======================================================================
@@ -455,11 +584,13 @@ class JsonBridgeNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = JsonBridgeNode()
-    exec_ = MultiThreadedExecutor()
+    exec_ = MultiThreadedExecutor(num_threads=4)
     exec_.add_node(node)
     try:
         exec_.spin()
     finally:
+        node._io_executor.shutdown()
+        node._io_node.destroy_node()
         node.destroy_node()
         rclpy.shutdown()
 
