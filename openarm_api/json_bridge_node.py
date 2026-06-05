@@ -22,7 +22,7 @@ Wire format -- request envelope
 -------------------------------
     {
       "cmd_id": "<uuid>",                            # required
-      "cmd_type": "pick_place|pick|place|home|hands_up|stop|gripper|get_status",
+      "cmd_type": "pick_place|pick|place|hand_water|home|hands_up|stop|gripper|get_status",
       "arm": "left|right|both",
       "pose_source": "camera|upper_computer",
       "params": { ... per-cmd, see schemas/ ... },
@@ -71,7 +71,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import Pose, Quaternion
 
-from openarm_skills.action import PickPlace
+from openarm_skills.action import PickPlace, HandWater
 from openarm_skills.srv import (
     Stop as StopSrv,
     GotoHome as GotoHomeSrv,
@@ -202,6 +202,8 @@ class JsonBridgeNode(Node):
 
         self._pick_place_client = ActionClient(
             self._io_node, PickPlace, "/openarm/pick_place")
+        self._hand_water_client = ActionClient(
+            self._io_node, HandWater, "/openarm/hand_water")
         self._stop_client = self._io_node.create_client(StopSrv, "/openarm/stop")
         self._home_client = self._io_node.create_client(
             GotoHomeSrv, "/openarm/goto_home")
@@ -321,6 +323,8 @@ class JsonBridgeNode(Node):
         try:
             if cmd in ("pick_place", "pick", "place"):
                 out = self._do_pick_place(envelope)
+            elif cmd == "hand_water":
+                out = self._do_hand_water(envelope)
             elif cmd == "home":
                 out = self._do_home(envelope)
             elif cmd == "hands_up":
@@ -420,6 +424,61 @@ class JsonBridgeNode(Node):
                 "grasp_pose": _pose_msg_to_dict(r.perceived_grasp_pose),
                 "place_pose": _pose_msg_to_dict(r.perceived_place_pose),
             }
+        self._publish_event(out)
+        return json.dumps(out)
+
+    def _do_hand_water(self, env: dict) -> str:
+        cmd_id = env["cmd_id"]
+        params = env.get("params", {}) or {}
+
+        if not self._hand_water_client.wait_for_server(timeout_sec=2.0):
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.INTERNAL_ERROR,
+                status="error",
+                message="skill server action /openarm/hand_water unavailable"))
+
+        goal = HandWater.Goal()
+        goal.cmd_id = cmd_id
+        goal.arm = env.get("arm", "right")
+        goal.speed_scale = float(params.get("speed_scale", 0.0))
+        goal.wait_timeout_s = 0.0
+        goal.gripper_force = float(params.get("gripper_force", 0.0))
+        goal.gripper_speed = float(params.get("gripper_speed", 0.0))
+        goal.timeout_s = float(env.get("timeout_s",
+                                      self.get_parameter("default_timeout_s").value))
+
+        send_future = self._hand_water_client.send_goal_async(
+            goal, feedback_callback=lambda fb: self._rebroadcast_feedback(cmd_id, fb))
+        if not self._wait_on_io_future(send_future, 5.0, "hand_water send_goal"):
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.ACTION_TIMEOUT,
+                status="error", message="hand_water send_goal timeout"))
+        gh = send_future.result()
+        if gh is None or not gh.accepted:
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.BAD_REQUEST,
+                status="error", message="hand_water goal rejected by skill server"))
+
+        result_future = gh.get_result_async()
+        if not self._wait_on_io_future(
+                result_future, goal.timeout_s + 30.0, "hand_water result"):
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.ACTION_TIMEOUT,
+                status="error", message="hand_water action result timeout"))
+        wrap = result_future.result()
+        if wrap is None:
+            return json.dumps(_envelope(
+                cmd_id, success=False, result_code=ec.ACTION_TIMEOUT,
+                status="error", message="hand_water action result timeout"))
+        r = wrap.result
+
+        out: dict = _envelope(
+            cmd_id,
+            success=bool(r.success),
+            result_code=int(r.result_code),
+            status=r.status or ("done" if r.success else "error"),
+            message=r.message,
+        )
         self._publish_event(out)
         return json.dumps(out)
 

@@ -33,6 +33,24 @@
     {
       "type": "function",
       "function": {
+        "name": "hand_water",
+        "description": "Pick from behind and move to front hover (place.approach). Poses are fixed; specify left or right arm. Gripper stays closed and arm holds position — use separate gripper/home commands to release or return.",
+        "parameters": {
+          "type": "object",
+          "required": ["cmd_id", "arm"],
+          "properties": {
+            "cmd_id":         { "type": "string", "description": "Fresh UUID per call." },
+            "arm":            { "type": "string", "enum": ["left", "right"] },
+            "speed_scale":    { "type": "number", "default": 0.10 },
+            "gripper_force":  { "type": "number", "default": 8.0 },
+            "gripper_speed":  { "type": "number", "default": 0.3 }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "home",
         "description": "Drive both arms (or one) back to the SRDF home pose.",
         "parameters": {

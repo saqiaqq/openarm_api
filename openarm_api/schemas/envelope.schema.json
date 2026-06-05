@@ -10,7 +10,7 @@
     "cmd_id":     { "type": "string", "minLength": 1, "maxLength": 64,
                     "description": "Caller-generated UUID. Used for idempotency / correlation." },
     "cmd_type":   { "type": "string",
-                    "enum": ["pick_place", "pick", "place", "home", "hands_up", "stop", "gripper", "get_status"] },
+                    "enum": ["pick_place", "pick", "place", "hand_water", "home", "hands_up", "stop", "gripper", "get_status"] },
     "arm":        { "type": "string", "enum": ["left", "right", "both"] },
     "pose_source":{ "type": "string", "enum": ["camera", "upper_computer"] },
     "params":     { "type": "object" },
